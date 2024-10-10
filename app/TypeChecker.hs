@@ -13,20 +13,20 @@ import Prelude hiding (fail)
 #endif
 
 typecheck :: Program -> Err ()
-typecheck (PDefs defs) = case generateSignature defs of
+typecheck (PDefs defs) = case sign defs of
   Ok env -> checkProg env (PDefs defs)
-  Bad errorMessage -> fail errorMessage
+  Bad err -> fail err
 
 checkProg :: Env -> Program -> Err ()
 checkProg env (PDefs defs) = do
-  env' <- generateSignature defs
+  env' <- sign defs
   env'' <- foldM (\env fun -> checkDef env' fun) () defs
   return ()
 
 checkDef :: Env -> Def -> Err ()
-checkDef env (DFun type1 id args stms) = do
-  env' <- foldM (\env (ADecl type2 id) -> updateVar env id type2) (newBlock env) args
-  checkStms type1 env' stms
+checkDef env (DFun t1 id args stms) = do
+  env' <- foldM (\env (ADecl t2 id) -> updateVar env id t2) (newBlock env) args
+  checkStms t1 env' stms
   return ()
 
 inferExp :: Env -> Exp -> Err Type
@@ -43,42 +43,42 @@ inferExp env (EApp id exps) = do
     expTypes <- mapM (inferExp env) exps
     if expTypes == argTypes
     then return returnType
-    else fail $ "Type error: Expected " ++ printTree argTypes ++ ". Actual: " ++ printTree expTypes
-    else fail $ "Type error: Expected " ++ show (length argTypes) ++ " arguments. Actual: " ++ show (length exps)
-inferExp env (EPIncr exp) = inferOperationWithOneExp env exp
-inferExp env (EPDecr exp) = inferOperationWithOneExp env exp
-inferExp env (EIncr exp) = inferOperationWithOneExp env exp
-inferExp env (EDecr exp) = inferOperationWithOneExp env exp
-inferExp env (ETimes exp1 exp2) = inferOperationWithTwoExp env exp1 exp2
-inferExp env (EDiv exp1 exp2) = inferOperationWithTwoExp env exp1 exp2
-inferExp env (EPlus exp1 exp2) = inferOperationWithTwoExp env exp1 exp2
-inferExp env (EMinus exp1 exp2) = inferOperationWithTwoExp env exp1 exp2
-inferExp env (ELt exp1 exp2) = inferOperationBoolWithTwoExp env exp1 exp2
-inferExp env (EGt exp1 exp2) = inferOperationBoolWithTwoExp env exp1 exp2
-inferExp env (ELtEq exp1 exp2) = inferOperationBoolWithTwoExp env exp1 exp2
-inferExp env (EGtEq exp1 exp2) = inferOperationBoolWithTwoExp env exp1 exp2
-inferExp env (EEq exp1 exp2) = inferEqualityOperation env exp1 exp2
-inferExp env (ENEq exp1 exp2) = inferEqualityOperation env exp1 exp2
-inferExp env (EAnd exp1 exp2) = inferOperationOperatorWithTwoExp env exp1 exp2
-inferExp env (EOr exp1 exp2) = inferOperationOperatorWithTwoExp env exp1 exp2
+    else fail $ "Type error"
+  else fail $ "Type error"
+inferExp env (EPIncr exp) = inferExp2 env exp
+inferExp env (EPDecr exp) = inferExp2 env exp
+inferExp env (EIncr exp) = inferExp2 env exp
+inferExp env (EDecr exp) = inferExp2 env exp
+inferExp env (ETimes exp1 exp2) = inferExps env exp1 exp2
+inferExp env (EDiv exp1 exp2) = inferExps env exp1 exp2
+inferExp env (EPlus exp1 exp2) = inferExps env exp1 exp2
+inferExp env (EMinus exp1 exp2) = inferExps env exp1 exp2
+inferExp env (ELt exp1 exp2) = inferBoolExps env exp1 exp2
+inferExp env (EGt exp1 exp2) = inferBoolExps env exp1 exp2
+inferExp env (ELtEq exp1 exp2) = inferBoolExps env exp1 exp2
+inferExp env (EGtEq exp1 exp2) = inferBoolExps env exp1 exp2
+inferExp env (EEq exp1 exp2) = inferEqualExps env exp1 exp2
+inferExp env (ENEq exp1 exp2) = inferEqualExps env exp1 exp2
+inferExp env (EAnd exp1 exp2) = inferOperatorExps env exp1 exp2
+inferExp env (EOr exp1 exp2) = inferOperatorExps env exp1 exp2
 inferExp env (EAss exp1 exp2) = do
   type1 <- inferExp env exp1
   type2 <- inferExp env exp2
   if type1 == type2
   then return type1
-  else fail $ "Type error: Expected " ++ printTree type1 ++ ". Actual: " ++ printTree type2
+  else fail $ "Type error"
 inferExp env (ETyped exp1 type1) = do
   type2 <- inferExp env exp1
   if type2 == type1
   then return type1
-  else fail $ "Type error: Expected " ++ printTree type1 ++ ". Actual: " ++ printTree type2
+  else fail $ "Type error"
 
 checkExp :: Env -> Exp -> Type -> Err ()
-checkExp env exp expType = do
-  actualType <- inferExp env exp
-  if actualType == expType
+checkExp env exp t = do
+  at <- inferExp env exp
+  if at == t
   then return ()
-  else fail $ "Type error: Expected " ++ printTree expType ++ ". Actual: " ++ printTree actualType
+  else fail $ "Type error"
 
 checkStms :: Type -> Env -> [Stm] -> Err Env
 checkStms returnType env [] = return env
@@ -87,48 +87,6 @@ checkStms returnType env (stm : stms) = do
   checkStms returnType updatedEnv stms
 
 -- Funciones auxiliares
-generateSignature :: [Def] -> Err Env
-generateSignature = foldM (\env (DFun t id args _) -> updateFun env id (Prelude.map (\(ADecl t id) -> t) args, t)) emptyEnv
-
-inferOperationWithOneExp :: Env -> Exp -> Err Type
-inferOperationWithOneExp env exp = do
-  actualType <- inferExp env exp
-  if actualType == Type_int || actualType == Type_double
-  then return actualType
-  else fail $ "Type error: Expected " ++ printTree Type_int ++ "or " ++ printTree Type_double ++ ". Actual: " ++ printTree actualType
-
-inferOperationWithTwoExp :: Env -> Exp -> Exp -> Err Type
-inferOperationWithTwoExp env exp1 exp2 = do
-  actualType1 <- inferExp env exp1
-  actualType2 <- inferExp env exp2
-  if (actualType1 == Type_int && actualType2 == Type_int) || (actualType1 == Type_double && actualType2 == Type_double)
-  then return actualType1
-  else fail $ "Type error: Expected " ++ printTree Type_int ++ "or " ++ printTree Type_double ++ ". Actual: " ++ printTree actualType1
-
-inferOperationBoolWithTwoExp :: Env -> Exp -> Exp -> Err Type
-inferOperationBoolWithTwoExp env exp1 exp2 = do
-  actualType1 <- inferExp env exp1
-  actualType2 <- inferExp env exp2
-  if (actualType1 == Type_int && actualType2 == Type_int) || (actualType1 == Type_double && actualType2 == Type_double)
-  then return Type_bool
-  else fail $ "Type error: Expected " ++ printTree Type_int ++ "or " ++ printTree Type_double ++ ". Actual: " ++ printTree actualType1
-
-inferOperationOperatorWithTwoExp :: Env -> Exp -> Exp -> Err Type
-inferOperationOperatorWithTwoExp env exp1 exp2 = do
-  actualType1 <- inferExp env exp1
-  actualType2 <- inferExp env exp2
-  if actualType1 == Type_bool && actualType2 == Type_bool
-  then return Type_bool
-  else fail $ "Type error: Expected both" ++ printTree Type_bool ++ ". Actual: " ++ printTree actualType1 ++ " and " ++ printTree actualType2
-
-inferEqualityOperation :: Env -> Exp -> Exp -> Err Type
-inferEqualityOperation env exp1 exp2 = do
-  actualType1 <- inferExp env exp1
-  actualType2 <- inferExp env exp2
-  if actualType1 == actualType2
-  then return Type_bool
-  else fail $ "Type error: Expected " ++ printTree actualType1 ++ ". Actual: " ++ printTree actualType2
-
 checkStm :: Type -> Env -> Stm -> Err Env
 checkStm returnType env (SExp exp) = do
   inferExp env exp
@@ -143,7 +101,7 @@ checkStm returnType env (SReturn exp) = do
 checkStm returnType env SReturnVoid = do
   if returnType == Type_void
   then return env
-  else fail $ "Type error: Expected " ++ printTree Type_void ++ ". Actual: " ++ printTree returnType
+  else fail $ "Type error"
 checkStm returnType env (SWhile exp stm) = do
   checkExp env exp Type_bool
   checkStm returnType env stm
@@ -156,3 +114,45 @@ checkStm returnType env (SIfElse exp stm1 stm2) = do
   checkStm returnType env stm1
   checkStm returnType env stm2
   return env
+
+sign :: [Def] -> Err Env
+sign = foldM (\env (DFun t id args _) -> updateFun env id (Prelude.map (\(ADecl t id) -> t) args, t)) emptyEnv
+
+inferExp2 :: Env -> Exp -> Err Type
+inferExp2 env exp = do
+  actualType <- inferExp env exp
+  if actualType == Type_int || actualType == Type_double
+  then return actualType
+  else fail $ "Type error"
+
+inferExps :: Env -> Exp -> Exp -> Err Type
+inferExps env exp1 exp2 = do
+  actualType1 <- inferExp env exp1
+  actualType2 <- inferExp env exp2
+  if (actualType1 == Type_int && actualType2 == Type_int) || (actualType1 == Type_double && actualType2 == Type_double)
+  then return actualType1
+  else fail $ "Type error"
+
+inferBoolExps :: Env -> Exp -> Exp -> Err Type
+inferBoolExps env exp1 exp2 = do
+  actualType1 <- inferExp env exp1
+  actualType2 <- inferExp env exp2
+  if (actualType1 == Type_int && actualType2 == Type_int) || (actualType1 == Type_double && actualType2 == Type_double)
+  then return Type_bool
+  else fail $ "Type error"
+
+inferOperatorExps :: Env -> Exp -> Exp -> Err Type
+inferOperatorExps env exp1 exp2 = do
+  actualType1 <- inferExp env exp1
+  actualType2 <- inferExp env exp2
+  if actualType1 == Type_bool && actualType2 == Type_bool
+  then return Type_bool
+  else fail $ "Type error"
+
+inferEqualExps :: Env -> Exp -> Exp -> Err Type
+inferEqualExps env exp1 exp2 = do
+  actualType1 <- inferExp env exp1
+  actualType2 <- inferExp env exp2
+  if actualType1 == actualType2
+  then return Type_bool
+  else fail $ "Type error"
