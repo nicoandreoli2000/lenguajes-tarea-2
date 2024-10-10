@@ -20,24 +20,28 @@ type Sig = Map Id ([Type],Type)
 type Context = Map Id Type
 
 lookupVar :: Env -> Id -> Err Type
-lookupVar (sig, _) id = case Map.lookup id sig of
+lookupVar (sigma, []) id = fail $ "Variable " ++ printTree id ++ " not found"
+lookupVar (sig, c : cs) id = case Map.lookup id c of
     Just t -> return t
-    Nothing -> fail $ "Variable " ++ printTree id ++ " not found"
+    Nothing -> lookupVar (sig, cs) id
 
 lookupFun :: Env -> Id -> Err ([Type], Type)
-lookupFun (sig, _) id = case Map.lookup id sig of
+lookupFun (sig, t) id = case Map.lookup id sig of
     Just (ts, t) -> return (ts, t)
     Nothing -> fail $ "Function " ++ printTree id ++ " not found"
 
 updateVar :: Env -> Id -> Type -> Err Env
-updateVar (sig, (c:cs)) id t = return (sig, (insert id t c) : cs)
-updateVar _ _ _ = fail "No context available to update variable"
+updateVar (sig, c : cs) id t = case Map.lookup id c of
+    Just _ -> fail $ "Variable " ++ printTree id ++ " already declared"
+    Nothing -> return (sig, Map.insert id t c : cs)
 
 updateFun :: Env -> Id -> ([Type],Type) -> Err Env
-updateFun (sig, cs) id funType = return (insert id funType sig, cs)
+updateFun (sigma, cs) id t = case lookupFun (sigma, cs) id of
+    Ok _ -> fail $ "Function " ++ printTree id ++ " already declared"
+    Bad _ -> return (Map.insert id t sigma, cs)
 
 newBlock :: Env -> Env
-newBlock (sig, ctx) = (sig, empty : ctx)
+newBlock (sig, cs) = (sig, Map.empty : cs)
 
 emptyEnv :: Env
-emptyEnv = (empty, [empty])
+emptyEnv = (Map.empty, [Map.empty])
