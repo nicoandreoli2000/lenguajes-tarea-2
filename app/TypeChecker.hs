@@ -3,7 +3,7 @@
 module TypeChecker where
 
 import AbsCPP
-import Control.Monad hiding (fail)
+import Control.Monad
 import PrintCPP
 import ErrM
 import Env
