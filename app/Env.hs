@@ -38,9 +38,9 @@ updateVar (sig, c : cs) id t = case Map.lookup id c of
     Nothing -> return (sig, Map.insert id t c : cs)
 
 updateFun :: Env -> Id -> ([Type],Type) -> Err Env
-updateFun (sigma, cs) id t = case lookupFun (sigma, cs) id of
-    Ok _ -> fail $ "Function " ++ printTree id ++ " already declared"
-    Bad _ -> return (Map.insert id t sigma, cs)
+updateFun (sigma, context) id values = case Map.lookup id sigma of
+  Nothing -> return (Map.insert id values sigma, context);
+  Just _ -> fail $ "Function " ++ show id ++ " already declared"
 
 newBlock :: Env -> Env
 newBlock (sig, cs) = (sig, Map.empty : cs)
