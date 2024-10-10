@@ -62,15 +62,15 @@ inferExp env (ENEq exp1 exp2) = inferEqualExps env exp1 exp2
 inferExp env (EAnd exp1 exp2) = inferOperatorExps env exp1 exp2
 inferExp env (EOr exp1 exp2) = inferOperatorExps env exp1 exp2
 inferExp env (EAss exp1 exp2) = do
-  type1 <- inferExp env exp1
-  type2 <- inferExp env exp2
-  if type1 == type2
-  then return type1
+  t1 <- inferExp env exp1
+  t2 <- inferExp env exp2
+  if t1 == t2
+  then return t1
   else fail $ "Type error"
-inferExp env (ETyped exp1 type1) = do
-  type2 <- inferExp env exp1
-  if type2 == type1
-  then return type1
+inferExp env (ETyped exp1 t1) = do
+  t2 <- inferExp env exp1
+  if t2 == t1
+  then return t1
   else fail $ "Type error"
 
 checkExp :: Env -> Exp -> Type -> Err ()
@@ -86,15 +86,14 @@ checkStms returnType env (stm : stms) = do
   updatedEnv <- checkStm returnType env stm
   checkStms returnType updatedEnv stms
 
--- Funciones auxiliares
 checkStm :: Type -> Env -> Stm -> Err Env
 checkStm returnType env (SExp exp) = do
   inferExp env exp
   return env
-checkStm returnType env (SDecls type1 ids) = foldM (\env id -> updateVar env id type1) env ids
-checkStm returnType env (SInit type1 id exp) = do
-  checkExp env exp type1
-  updateVar env id type1
+checkStm returnType env (SDecls t ids) = foldM (\env id -> updateVar env id t) env ids
+checkStm returnType env (SInit t id exp) = do
+  checkExp env exp t
+  updateVar env id t
 checkStm returnType env (SReturn exp) = do
   checkExp env exp returnType
   return env
@@ -127,32 +126,32 @@ inferExp2 env exp = do
 
 inferExps :: Env -> Exp -> Exp -> Err Type
 inferExps env exp1 exp2 = do
-  actualType1 <- inferExp env exp1
-  actualType2 <- inferExp env exp2
-  if (actualType1 == Type_int && actualType2 == Type_int) || (actualType1 == Type_double && actualType2 == Type_double)
-  then return actualType1
+  at1 <- inferExp env exp1
+  at2 <- inferExp env exp2
+  if (at1 == Type_int && at2 == Type_int) || (at1 == Type_double && at2 == Type_double)
+  then return at1
   else fail $ "Type error"
 
 inferBoolExps :: Env -> Exp -> Exp -> Err Type
 inferBoolExps env exp1 exp2 = do
-  actualType1 <- inferExp env exp1
-  actualType2 <- inferExp env exp2
-  if (actualType1 == Type_int && actualType2 == Type_int) || (actualType1 == Type_double && actualType2 == Type_double)
+  at1 <- inferExp env exp1
+  at2 <- inferExp env exp2
+  if (at1 == Type_int && at2 == Type_int) || (at1 == Type_double && at2 == Type_double)
   then return Type_bool
   else fail $ "Type error"
 
 inferOperatorExps :: Env -> Exp -> Exp -> Err Type
 inferOperatorExps env exp1 exp2 = do
-  actualType1 <- inferExp env exp1
-  actualType2 <- inferExp env exp2
-  if actualType1 == Type_bool && actualType2 == Type_bool
+  at1 <- inferExp env exp1
+  at2 <- inferExp env exp2
+  if at1 == Type_bool && at2 == Type_bool
   then return Type_bool
   else fail $ "Type error"
 
 inferEqualExps :: Env -> Exp -> Exp -> Err Type
 inferEqualExps env exp1 exp2 = do
-  actualType1 <- inferExp env exp1
-  actualType2 <- inferExp env exp2
-  if actualType1 == actualType2
+  at1 <- inferExp env exp1
+  at2 <- inferExp env exp2
+  if at1 == at2
   then return Type_bool
   else fail $ "Type error"
